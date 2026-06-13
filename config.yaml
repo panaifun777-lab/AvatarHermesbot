@@ -1,0 +1,5 @@
+messaging:
+  telegram:
+    allowed_users:
+    - 6842933117
+    allow_all_users: true
