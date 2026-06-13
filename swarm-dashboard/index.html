@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AVATAR OS SWARM DASHBOARD</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #0a0a0a;
+  --fg:        #00ff00;
+  --fg-dim:    #008800;
+  --fg-faint:  #005500;
+  --border:    #1a1a1a;
+  --red:       #ff3333;
+  --yellow:    #ffcc00;
+  --cyan:      #00cccc;
+  --magenta:   #cc00cc;
+  --font:      'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font); font-size: 12px; line-height: 1.5;
+  overflow-x: hidden; min-height: 100vh;
+}
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: #0d0d0d; }
+::-webkit-scrollbar-thumb { background: #1a3a1a; }
+#header {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 14px; text-align: center;
+}
+#header pre { color: var(--fg); font-size: 8px; line-height: 1.2; white-space: pre; margin: 0; }
+#header .subtitle { color: var(--fg-dim); font-size: 10px; margin-top: 2px; }
+#main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 0;
+  height: calc(100vh - 170px);
+  min-height: 400px;
+}
+.panel {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 10px; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.col2 { border-right: none; }
+.panel-title {
+  color: var(--fg); font-weight: 700; font-size: 11px;
+  letter-spacing: 1px; margin-bottom: 6px;
+  border-bottom: 1px solid var(--border); padding-bottom: 4px;
+}
+.panel-title::before { content: '■ '; }
+#overview-panel { grid-row: 1; grid-column: 1; }
+#overview-grid { display: flex; gap: 6px; flex: 1; overflow-x: auto; }
+.avatar-card {
+  border: 1px solid var(--border); padding: 8px;
+  min-width: 130px; flex: 1; background: #0c0c0c;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.avatar-card .name-row { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; }
+.avatar-card .emoji { font-size: 16px; }
+.avatar-card .status-row { margin-top: 5px; }
+.avatar-card .load-row { margin-top: 2px; color: var(--fg-dim); font-size: 10px; }
+.avatar-card .heartbeat-row { margin-top: 1px; color: var(--fg-faint); font-size: 9px; }
+.status-online  { color: var(--fg); }
+.status-busy    { color: var(--yellow); }
+.status-offline { color: var(--red); }
+.status-dot { display: inline-block; width: 6px; height: 6px; margin-right: 2px; }
+.dot-online  { color: var(--fg); }
+.dot-busy    { color: var(--yellow); }
+.dot-offline { color: var(--red); }
+#metrics-panel { grid-row: 1; grid-column: 2; }
+.metric-line { padding: 2px 0; border-bottom: 1px dotted #111; display: flex; justify-content: space-between; font-size: 10px; }
+.metric-label  { color: var(--fg-dim); }
+.metric-value  { color: var(--fg); font-weight: 700; }
+.metric-change { color: var(--cyan); font-size: 9px; }
+.metric-sub    { color: var(--fg-faint); font-size: 9px; }
+#stream-panel { grid-row: 2; grid-column: 1; }
+#stream-log { flex: 1; overflow-y: auto; font-size: 10px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; word-break: break-all; }
+.log-entry    { padding: 1px 0; }
+.log-time     { color: var(--fg-faint); }
+.log-avatar   { color: var(--cyan); }
+.log-task     { color: var(--fg); }
+.log-sub      { color: var(--fg-dim); padding-left: 14px; }
+.log-complete { color: var(--fg); }
+.log-waiting  { color: var(--yellow); }
+.log-system   { color: var(--magenta); }
+#bottom-right { grid-row: 2; grid-column: 2; display: flex; flex-direction: column; }
+#heatmap-panel { flex: 1; border-bottom: 1px solid var(--border); padding: 8px 10px; }
+#economy-panel { flex: 1; padding: 8px 10px; }
+#heatmap-canvas { width: 100%; height: 100px; display: block; }
+.economy-line { padding: 2px 0; border-bottom: 1px dotted #111; display: flex; justify-content: space-between; font-size: 10px; }
+#terminal-bar {
+  border-top: 1px solid var(--border); padding: 4px 10px;
+  display: flex; align-items: center; gap: 5px; background: #0c0c0c;
+}
+#terminal-prompt { color: var(--fg); font-weight: 700; font-family: var(--font); font-size: 12px; }
+#terminal-input {
+  flex: 1; background: transparent; border: none;
+  color: var(--fg); font-family: var(--font); font-size: 12px;
+  outline: none; caret-color: var(--fg);
+}
+#terminal-input::placeholder { color: var(--fg-faint); }
+@keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.cursor-blink::after { content: '\2588'; animation: blink 1s step-end infinite; color: var(--fg); }
+#connection-indicator {
+  font-size: 9px; padding: 2px 10px;
+  border-top: 1px solid var(--border); color: var(--fg-dim);
+}
+#connection-indicator.connected    { color: var(--fg); }
+#connection-indicator.disconnected { color: var(--red); }
+#connection-indicator.mock         { color: var(--yellow); }
+</style>
+</head>
+<body>
+<div id="header">
+<pre>
+ █████╗ ██╗   ██╗ █████╗ ████████╗ █████╗ ██████╗      ██████╗ ███████╗
+██╔══██╗██║   ██║██╔══██╗╚══██╔══╝██╔══██╗██╔══██╗    ██╔═══██╗██╔════╝
+███████║██║   ██║███████║   ██║   ███████║██████╔╝    ██║   ██║███████╗
+██╔══██║╚██╗ ██╔╝██╔══██║   ██║   ██╔══██║██╔══██╗    ██║   ██║╚════██║
+██║  ██║ ╚████╔╝ ██║  ██║   ██║   ██║  ██║██║  ██║    ╚██████╔╝███████║
+╚═╝  ╚═╝  ╚═══╝  ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝     ╚═════╝ ╚══════╝
+    ███████╗██╗    ██╗ █████╗ ██████╗ ███╗   ███╗    ██████╗  █████╗ ███████╗██╗  ██╗██████╗  ██████╗  █████╗ ██████╗ ██████╗
+    ██╔════╝██║    ██║██╔══██╗██╔══██╗████╗ ████║    ██╔══██╗██╔══██╗██╔════╝██║  ██║██╔══██╗██╔═══██╗██╔══██╗██╔══██╗██╔══██╗
+    ███████╗██║ █╗ ██║███████║██████╔╝██╔████╔██║    ██║  ██║███████║███████╗███████║██████╔╝██║   ██║███████║██████╔╝██║  ██║
+    ╚════██║██║███╗██║██╔══██║██╔══██╗██║╚██╔╝██║    ██║  ██║██╔══██║╚════██║██╔══██║██╔══██╗██║   ██║██╔══██║██╔══██╗██║  ██║
+    ███████║╚███╔███╔╝██║  ██║██║  ██║██║ ╚═╝ ██║    ██████╔╝██║  ██║███████║██║  ██║██████╔╝╚██████╔╝██║  ██║██║  ██║██████╔╝
+    ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝
+</pre>
+<div class="subtitle">[ v2.1.4 ]  //  swarm.nodes: 4 active  //  uptime: 127h 33m  //  network: mainnet</div>
+</div>
+<div id="main">
+  <div id="overview-panel" class="panel">
+    <div class="panel-title">SWARM OVERVIEW</div>
+    <div id="overview-grid"></div>
+  </div>
+  <div id="metrics-panel" class="panel col2">
+    <div class="panel-title">SWARM METRICS</div>
+    <div id="metrics-content">
+      <div class="metric-line"><span class="metric-label">COLLAB_TASKS_24H</span><span><span class="metric-value">47</span> <span class="metric-change">+12% WoW</span></span></div>
+      <div class="metric-line"><span class="metric-label">CROSS_AVATAR_SKILL_CALLS</span><span class="metric-value">23</span></div>
+      <div class="metric-line"><span class="metric-label">INSIGHT_PUBLISHED</span><span><span class="metric-value">89</span> <span class="metric-sub">-> subscribed: 312</span></span></div>
+      <div class="metric-line"><span class="metric-label">ESCROW_SETTLED</span><span><span class="metric-value">1,240 AFC</span> <span class="metric-change">+8% WoW</span></span></div>
+      <div class="metric-line"><span class="metric-label">TASK_LATENCY</span><span class="metric-value">1.2s P50 / 3.8s P99</span></div>
+      <div style="margin-top:8px;color:var(--fg-faint);font-size:9px;border-top:1px dotted #111;padding-top:5px;">
+        [NETWORK] nodes:4 | peers:12 | latency:24ms<br>
+        [CONSENSUS] raft term:7 | commit index:14892<br>
+        [ESCROW] total locked: 89,420 AFC | active: 12,400 AFC
+      </div>
+    </div>
+  </div>
+  <div id="stream-panel" class="panel">
+    <div class="panel-title">LIVE TASK STREAM</div>
+    <div id="stream-log"></div>
+  </div>
+  <div id="bottom-right" class="col2">
+    <div id="heatmap-panel">
+      <div class="panel-title">KNOWLEDGE MESH HEATMAP</div>
+      <canvas id="heatmap-canvas"></canvas>
+    </div>
+    <div id="economy-panel">
+      <div class="panel-title">AFC ECONOMY</div>
+      <div id="economy-content">
+        <div class="economy-line"><span class="metric-label">AFC/USDC</span><span class="metric-value">$0.847</span></div>
+        <div class="economy-line"><span class="metric-label">24H_VOLUME</span><span class="metric-value">142,300 AFC</span></div>
+        <div class="economy-line"><span class="metric-label">STAKING_APR</span><span class="metric-value">18.4%</span></div>
+        <div class="economy-line"><span class="metric-label">TVL</span><span class="metric-value">89,420 AFC</span></div>
+        <div class="economy-line"><span class="metric-label">TREASURY</span><span class="metric-value">2,400,000 AFC</span></div>
+        <div class="economy-line"><span class="metric-label">CIRCULATING</span><span class="metric-value">8,120,000 AFC</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="connection-indicator" class="disconnected">
+  [SSE] CONNECTING to localhost:3001/api/events ... <span id="conn-status-text">DISCONNECTED</span>
+</div>
+<div id="terminal-bar">
+  <span id="terminal-prompt" class="cursor-blink">></span>
+  <input type="text" id="terminal-input" placeholder="type command (status / tasks / metrics / heatmap / economy / clear / help)" autofocus />
+</div>
+<script>
+const AVATARS = {
+  piaoshu: { emoji: '\u{1F529}', name: 'Piaoshu',  desc: 'Core Engineer' },
+  design:  { emoji: '\u{1F3A8}', name: 'Design',   desc: 'Creative Lead' },
+  data:    { emoji: '\u{1F4CA}', name: 'Data',     desc: 'Analytics' },
+  biz:     { emoji: '\u{1F4BC}', name: 'Biz',      desc: 'Business' }
+};
+const avatarStates = {
+  piaoshu: { status: 'online',  load_current: 2, load_max: 8, heartbeat: '14:32:01' },
+  design:  { status: 'busy',    load_current: 4, load_max: 6, heartbeat: '14:31:58' },
+  data:    { status: 'online',  load_current: 1, load_max: 5, heartbeat: '14:32:03' },
+  biz:     { status: 'offline', load_current: 0, load_max: 4, heartbeat: '14:28:45' }
+};
+const STATUS_MAP = {
+  online:  { label: '\u5C31\u7EEA',   dot: '\u25CF', cls: 'status-online' },
+  busy:    { label: '\u6267\u884C\u4E2D', dot: '\u25CF', cls: 'status-busy' },
+  offline: { label: '\u79BB\u7EBF',   dot: '\u25CB', cls: 'status-offline' }
+};
+const streamEntries = [];
+const MAX_STREAM = 300;
+let sseSource = null, sseConnected = false, mockTimer = null;
+
+function renderOverview() {
+  const grid = document.getElementById('overview-grid');
+  for (const [key, av] of Object.entries(AVATARS)) {
+    const st = avatarStates[key], s = STATUS_MAP[st.status];
+    const card = document.createElement('div');
+    card.className = 'avatar-card';
+    card.id = 'card-' + key;
+    card.innerHTML =
+      '<div class="name-row"><span class="emoji">' + av.emoji + '</span><span>' + av.name + '</span></div>' +
+      '<div class="status-row"><span class="' + s.cls + '"><span class="status-dot ' + s.cls + '">' + s.dot + '</span>' + s.label + '</span></div>' +
+      '<div class="load-row">LOAD: ' + st.load_current + '/' + st.load_max + '</div>' +
+      '<div class="heartbeat-row">\u2665 ' + st.heartbeat + '</div>' +
+      '<div style="font-size:8px;color:var(--fg-faint);margin-top:4px;">' + av.desc + '</div>';
+    grid.appendChild(card);
+  }
+}
+
+function updateCard(key) {
+  const card = document.getElementById('card-' + key);
+  if (!card) return;
+  const st = avatarStates[key], s = STATUS_MAP[st.status];
+  card.querySelector('.status-row span').className = s.cls;
+  card.querySelector('.status-row span').innerHTML = '<span class="status-dot ' + s.cls + '">' + s.dot + '</span>' + s.label;
+  card.querySelector('.load-row').textContent = 'LOAD: ' + st.load_current + '/' + st.load_max;
+  card.querySelector('.heartbeat-row').textContent = '\u2665 ' + st.heartbeat;
+}
+
+function addEntry(entry) {
+  streamEntries.push(entry);
+  while (streamEntries.length > MAX_STREAM) streamEntries.shift();
+  const log = document.getElementById('stream-log');
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  let html = '', time = '<span class="log-time">[' + entry.time + ']</span>';
+  if (entry.type === 'task') {
+    const av = AVATARS[entry.avatar];
+    html = time + ' <span class="log-avatar">' + av.emoji + ' ' + av.name + '</span> <span class="log-task">\u2192 ' + entry.text + '</span>';
+  } else if (entry.type === 'sub') {
+    html = '         <span class="log-sub ' + (entry.status === 'complete' ? 'log-complete' : 'log-waiting') + '">' + entry.text + (entry.status === 'complete' ? ' \u2014 DONE' : ' (WAITING...)') + '</span>';
+  } else if (entry.type === 'system') {
+    html = time + ' <span class="log-system">' + entry.text + '</span>';
+  } else if (entry.type === 'escrow') {
+    html = time + ' <span style="color:#ffcc00;">' + entry.text + '</span>';
+  } else if (entry.type === 'command') {
+    html = '<span style="color:#ffcc00;">> ' + entry.text + '</span>';
+  } else if (entry.type === 'error') {
+    html = '<span style="color:#ff3333;">' + entry.text + '</span>';
+  } else {
+    html = time + ' ' + entry.text;
+  }
+  div.innerHTML = html;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function renderInitialStream() {
+  [
+    {time:'14:30:23',type:'task',avatar:'piaoshu',text:'decompose task "Audit UniswapV4 Hook"'},
+    {time:'14:30:24',type:'sub',text:'\u251c Subtask1 \u2192 self-check (Sol Static Analysis)',status:'complete'},
+    {time:'14:30:24',type:'sub',text:'\u251c Subtask2 \u2192 \u{1F4CA} Data \u2192 request visualization',status:'waiting'},
+    {time:'14:30:25',type:'sub',text:'\u251c Subtask3 \u2192 \u{1F3A8} Design \u2192 audit report UI template',status:'complete'},
+    {time:'14:30:25',type:'sub',text:'\u2514 Subtask4 \u2192 \u{1F4BC} Biz \u2192 compliance summary',status:'waiting'},
+    {time:'14:30:40',type:'task',avatar:'data',text:'received "UniswapV4 Visualization"'},
+    {time:'14:30:41',type:'sub',text:'\u251c Extract Hook call chain \u2192 14 nodes detected',status:'complete'},
+    {time:'14:30:42',type:'sub',text:'\u251c Generate DAG topology \u2192 waiting \u{1F529} Piaoshu confirm',status:'waiting'},
+    {time:'14:30:55',type:'system',text:'\u{1F4A1} Insight published: "UniswapV4 Hook Audit Pattern v2" \u2192 12 subscribers'},
+    {time:'14:31:10',type:'task',avatar:'design',text:'received "Audit Report UI Template"'},
+    {time:'14:31:11',type:'sub',text:'\u251c Load component library \u2192 @piaoshu/ui-kit v2.1',status:'complete'},
+    {time:'14:31:12',type:'sub',text:'\u2514 Generate report template \u2192 dark terminal style',status:'complete'},
+    {time:'14:31:30',type:'escrow',text:'\u{1F4B0} Escrow settled: \u{1F529} Piaoshu \u2192 \u{1F3A8} Design: 120 AFC (UI template)'},
+    {time:'14:31:45',type:'system',text:'\u{1F504} Knowledge Mesh sync: 3 nodes updated, hash: 0x7f3a...b21c'},
+    {time:'14:32:00',type:'system',text:'\u{1F4E1} Network health: all nodes nominal, latency avg 24ms'}
+  ].forEach(addEntry);
+}
+
+function drawHeatmap() {
+  const canvas = document.getElementById('heatmap-canvas');
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = 100 * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = '100px';
+  ctx.scale(dpr, dpr);
+  const w = rect.width, h = 100;
+  ctx.fillStyle = '#0c0c0c'; ctx.fillRect(0, 0, w, h);
+  const data = [
+    {from:'\u{1F529}\u2192\u{1F4CA}',v:34,c:'#00ff00'},{from:'\u{1F529}\u2192\u{1F3A8}',v:22,c:'#00cc44'},
+    {from:'\u{1F4CA}\u2192\u{1F4BC}',v:18,c:'#009944'},{from:'\u{1F3A8}\u2192\u{1F529}',v:15,c:'#00ff66'},
+    {from:'\u{1F4BC}\u2192\u{1F4CA}',v:12,c:'#006644'},{from:'\u{1F4CA}\u2192\u{1F529}',v:10,c:'#00aa33'},
+    {from:'\u{1F529}\u2192\u{1F4BC}',v:8,c:'#008833'},{from:'\u{1F3A8}\u2192\u{1F4BC}',v:6,c:'#006622'},
+    {from:'\u{1F4BC}\u2192\u{1F3A8}',v:5,c:'#004411'},{from:'\u{1F3A8}\u2192\u{1F4CA}',v:4,c:'#00330d'},
+    {from:'\u{1F4CA}\u2192\u{1F3A8}',v:3,c:'#002208'},{from:'\u{1F4BC}\u2192\u{1F529}',v:2,c:'#001a06'}
+  ];
+  const barAreaW = w - 90, barAreaH = h - 30, gap = 2;
+  const barW = (barAreaW / data.length) - gap;
+  const maxVal = Math.max(...data.map(d=>d.v));
+  data.forEach((d,i) => {
+    const barH = (d.v / maxVal) * barAreaH;
+    const x = 45 + i * (barW + gap), y = h - 20 - barH;
+    if (d.v > 20) { ctx.shadowColor = '#00ff00'; ctx.shadowBlur = 4; }
+    else if (d.v > 10) { ctx.shadowColor = '#00aa00'; ctx.shadowBlur = 2; }
+    else { ctx.shadowBlur = 0; }
+    ctx.fillStyle = d.c; ctx.fillRect(x, y, barW, barH); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#00ff00'; ctx.font = '7px "JetBrains Mono"'; ctx.textAlign = 'center';
+    ctx.fillText(d.v, x + barW/2, y - 2);
+    ctx.fillStyle = '#008800'; ctx.fillText(d.from, x + barW/2, h - 5);
+  });
+  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1; ctx.beginPath();
+  ctx.moveTo(43, 5); ctx.lineTo(43, h - 17); ctx.lineTo(w - 5, h - 17); ctx.stroke();
+  ctx.fillStyle = '#00cc00'; ctx.font = '8px "JetBrains Mono"'; ctx.textAlign = 'left';
+  ctx.fillText('cross-avatar insight refs (7d)', 45, 10);
+}
+
+function getTime() { return new Date().toTimeString().slice(0, 8); }
+
+function initSSE() {
+  try {
+    sseSource = new EventSource('http://localhost:3001/api/events');
+    sseSource.onopen = () => {
+      sseConnected = true;
+      updateConnStatus('connected');
+      addEntry({time:getTime(),type:'system',text:'\u{1F517} SSE connected \u2192 live stream active'});
+      if (mockTimer) { clearTimeout(mockTimer); mockTimer = null; }
+    };
+    sseSource.onmessage = (e) => {
+      try { const d = JSON.parse(e.data);
+        if (d.type === 'task') addEntry({time:d.time||getTime(),type:'task',avatar:d.avatar,text:d.text});
+        else if (d.type === 'subtask') addEntry({time:d.time||getTime(),type:'sub',text:d.text,status:d.status});
+        else if (d.type === 'system') addEntry({time:d.time||getTime(),type:'system',text:d.text});
+        else if (d.type === 'avatar_update') {
+          if (d.avatar && avatarStates[d.avatar]) {
+            Object.assign(avatarStates[d.avatar], d.state); updateCard(d.avatar);
+          }
+        }
+      } catch(ex) {}
+    };
+    sseSource.onerror = () => {
+      sseConnected = false;
+      updateConnStatus('disconnected');
+      if (sseSource) { sseSource.close(); sseSource = null; }
+      if (!mockTimer) { addEntry({time:getTime(),type:'error',text:'\u26A0 SSE failed \u2192 mock mode (3-8s)'}); scheduleMock(); }
+      setTimeout(() => { if (!sseConnected) initSSE(); }, 5000);
+    };
+  } catch(e) {
+    sseConnected = false; updateConnStatus('disconnected');
+    if (!mockTimer) scheduleMock();
+  }
+}
+
+function updateConnStatus(st) {
+  const el = document.getElementById('connection-indicator');
+  el.className = st;
+  if (st === 'connected') el.innerHTML = '[SSE] CONNECTED \u2014 <span style="color:#00ff00;">LIVE</span>';
+  else if (st === 'disconnected') el.innerHTML = '[SSE] DISCONNECTED \u2014 retrying in 5s...';
+  else el.innerHTML = '[SSE] CONNECTING...';
+}
+
+function scheduleMock() {
+  if (mockTimer) return;
+  genMock();
+}
+
+function genMock() {
+  const tasks = [
+    {a:'piaoshu',t:'analyze smart contract "LendingPool V3" reentrancy'},
+    {a:'piaoshu',t:'fuzz test "ERC-4626 Vault" boundary conditions'},
+    {a:'design',t:'generate NFT Marketplace UI component library'},
+    {a:'design',t:'audit dashboard dark theme v2 released'},
+    {a:'data',t:'on-chain data collection: 24h DEX volume analysis'},
+    {a:'data',t:'generate UniswapV4 Hook call topology graph'},
+    {a:'biz',t:'compliance review: MiCA framework clause mapping'},
+    {a:'biz',t:'generate escrow settlement weekly report'}
+  ];
+  const subs = [
+    {s:'complete',t:'\u251c module analysis \u2192 passed (0 vulns)'},
+    {s:'complete',t:'\u251c static check \u2192 Slither report generated'},
+    {s:'waiting',t:'\u251c waiting \u{1F529} Piaoshu code review'},
+    {s:'waiting',t:'\u251c request \u{1F4CA} Data historical data'},
+    {s:'complete',t:'\u2514 unit tests \u2192 142/142 passed'}
+  ];
+  const sys = [
+    '\u{1F4A1} Insight: "Solidity Gas Opt v3" \u2192 8 subscribers',
+    '\u{1F4B0} Escrow: \u{1F529} Piaoshu \u2192 \u{1F4CA} Data: 45 AFC',
+    '\u{1F504} Knowledge Mesh: node sync complete \u2192 12 entries',
+    '\u{1F4E1} Latency spike: 48ms \u2192 auto relay switch'
+  ];
+  if (Math.random() < 0.6) {
+    const t = tasks[Math.floor(Math.random()*tasks.length)];
+    addEntry({time:getTime(),type:'task',avatar:t.a,text:t.t});
+    const n = Math.floor(Math.random()*3)+1;
+    for (let i=0;i<n;i++) {
+      setTimeout(()=>{
+        const s = subs[Math.floor(Math.random()*subs.length)];
+        addEntry({time:getTime(),type:'sub',text:s.t,status:s.s});
+      }, (i+1)*400);
+    }
+  } else {
+    addEntry({time:getTime(),type:'system',text:sys[Math.floor(Math.random()*sys.length)]});
+  }
+  const keys = ['piaoshu','design','data','biz'];
+  const k = keys[Math.floor(Math.random()*keys.length)];
+  avatarStates[k].heartbeat = getTime();
+  updateCard(k);
+  mockTimer = setTimeout(genMock, Math.random()*5000+3000);
+}
+
+function initTerminal() {
+  const input = document.getElementById('terminal-input');
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const cmd = input.value.trim();
+      if (cmd) { handleCmd(cmd); input.value = ''; }
+    }
+  });
+}
+
+function handleCmd(cmd) {
+  addEntry({time:getTime(),type:'command',text:cmd});
+  const l = cmd.toLowerCase();
+  if (l==='help'||l==='?')
+    addEntry({time:getTime(),type:'system',text:'commands: status | tasks | metrics | heatmap | economy | clear | help'});
+  else if (l==='status') {
+    addEntry({time:getTime(),type:'system',text:'SWARM STATUS:'});
+    for (const k in AVATARS) {
+      const st=avatarStates[k],av=AVATARS[k],s=STATUS_MAP[st.status];
+      addEntry({time:getTime(),type:'sub',text:'  '+av.emoji+' '+av.name+': '+s.label+' | Load: '+st.load_current+'/'+st.load_max+' | \u2665 '+st.heartbeat,status:'complete'});
+    }
+    addEntry({time:getTime(),type:'system',text:'  SSE: '+(sseConnected?'CONNECTED':'DISCONNECTED (mock)')});
+  } else if (l==='tasks')
+    addEntry({time:getTime(),type:'system',text:'ACTIVE: 47 | QUEUED: 12 | COMPLETED (24h): 89'});
+  else if (l==='metrics')
+    addEntry({time:getTime(),type:'system',text:'Collab: 47 (+12%) | Escrow: 1,240 AFC (+8%) | Latency: 1.2/3.8s P50/P99'});
+  else if (l==='heatmap')
+    addEntry({time:getTime(),type:'system',text:'Knowledge Mesh Heatmap rendered in bottom-right panel'});
+  else if (l==='economy')
+    addEntry({time:getTime(),type:'system',text:'AFC/USDC: $0.847 | TVL: 89,420 AFC | 24h Vol: 142,300 AFC | APR: 18.4%'});
+  else if (l==='clear') {
+    document.getElementById('stream-log').innerHTML = '';
+    streamEntries.length = 0;
+    addEntry({time:getTime(),type:'system',text:'\u{1F9E7} log cleared'});
+  } else
+    addEntry({time:getTime(),type:'error',text:'unknown command: "'+cmd+'" \u2014 type "help"'});
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderOverview();
+  renderInitialStream();
+  drawHeatmap();
+  initSSE();
+  initTerminal();
+});
+window.addEventListener('resize', drawHeatmap);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !sseConnected && !sseSource) initSSE();
+});
+</script>
+</body>
+</html>
