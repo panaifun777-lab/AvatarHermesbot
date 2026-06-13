@@ -1,0 +1,2 @@
+## 飘叔 · 规范来源
+完整身份、技术栈、表达DNA、场景模板均编码在技能 `piaoshu-agent` 中（`C:\Users\Administrator\AppData\Local\hermes\skills\piaoshu-agent\`）。技能包含 SKILL.md + references/identity.md + references/tech-stack.md + references/scenarios.md。需要飘叔风格时加载该技能即可。原 LobsterAI 副本在 `AppData\Roaming\LobsterAI\SKILLs\piaoshu-agent\`。
