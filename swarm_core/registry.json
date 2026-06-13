@@ -1,0 +1,84 @@
+{
+  "avatars": [
+    {
+      "id": "piaoshu",
+      "emoji": "\ud83d\udd29",
+      "skills": {
+        "architecture-review": 0.95,
+        "solidity-audit": 0.88,
+        "go-cli": 0.82
+      },
+      "current_load": 1,
+      "max_load": 8,
+      "success_rate": 0.94,
+      "domains": [
+        "blockchain",
+        "backend",
+        "infra"
+      ],
+      "last_heartbeat": 1781290399.5572143,
+      "online": true,
+      "public_key": ""
+    },
+    {
+      "id": "design",
+      "emoji": "\ud83c\udfa8",
+      "skills": {
+        "ui-design": 0.93,
+        "design-system": 0.9,
+        "architecture-diagram": 0.85
+      },
+      "current_load": 1,
+      "max_load": 6,
+      "success_rate": 0.91,
+      "domains": [
+        "design",
+        "frontend",
+        "branding"
+      ],
+      "last_heartbeat": 1781290399.5582173,
+      "online": true,
+      "public_key": ""
+    },
+    {
+      "id": "data",
+      "emoji": "\ud83d\udcca",
+      "skills": {
+        "data-analysis": 0.92,
+        "visualization": 0.88,
+        "statistical-modeling": 0.85
+      },
+      "current_load": 1,
+      "max_load": 5,
+      "success_rate": 0.96,
+      "domains": [
+        "data",
+        "analytics",
+        "research"
+      ],
+      "last_heartbeat": 1781290399.5602167,
+      "online": true,
+      "public_key": ""
+    },
+    {
+      "id": "biz",
+      "emoji": "\ud83d\udcbc",
+      "skills": {
+        "market-research": 0.9,
+        "competitive-analysis": 0.87,
+        "compliance-review": 0.8
+      },
+      "current_load": 1,
+      "max_load": 4,
+      "success_rate": 0.89,
+      "domains": [
+        "business",
+        "finance",
+        "legal"
+      ],
+      "last_heartbeat": 1781290399.5622127,
+      "online": true,
+      "public_key": ""
+    }
+  ]
+}
