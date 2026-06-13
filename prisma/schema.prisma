@@ -1,0 +1,910 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ===== 核心用户 =====
+model Founder {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  avatar    String?
+  bio       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 关联
+  decisions    DecisionLog[]
+  credentials  VerifiableCredential[]
+  tasks        CollaborationTask[]  @relation("TaskCreator")
+  assignments  CollaborationTask[]  @relation("TaskAssignee")
+}
+
+// ===== 认知分片引擎 =====
+model CognitiveShard {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  modelBase   String   @default("qwen")   // llama-3, qwen, etc.
+  loraAdapter String?                      // LoRA adapter path
+  status      String   @default("draft")   // draft, training, active, error
+  confidence  Float    @default(0.0)       // 置信度评分
+  shardType   String   @default("red")     // red (红方攻击), blue (蓝方防御), neutral
+  lastTrained DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  simulations RedBlueSimulation[]
+}
+
+model DecisionLog {
+  id          String   @id @default(cuid())
+  founderId   String
+  title       String
+  content     String
+  category    String   @default("strategic")  // strategic, product, technical, hiring
+  outcome     String?                           // 记录决策结果
+  confidence  Float    @default(0.0)
+  tags        String?                           // comma-separated tags
+  createdAt   DateTime @default(now())
+
+  founder Founder @relation(fields: [founderId], references: [id])
+}
+
+model RedBlueSimulation {
+  id          String   @id @default(cuid())
+  shardId     String
+  inputIdea   String                           // 输入的新想法
+  redOutput   String?                          // 红方攻击输出（致命漏洞）
+  blueOutput  String?                          // 蓝方防御输出
+  verdict     String?                          // 最终裁定
+  confidence  Float    @default(0.0)
+  status      String   @default("pending")     // pending, completed, escalated
+  createdAt   DateTime @default(now())
+
+  shard CognitiveShard @relation(fields: [shardId], references: [id])
+}
+
+// ===== 可信证据链 =====
+model EvidenceItem {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  evidenceType String  @default("interview")   // interview, ab_test, decision_log, metric
+  rawData     String?                           // 原始数据 (JSON string)
+  contentHash String?                           // 内容哈希
+  storageRef  String?                           // IPFS/Arweave 引用
+  chainTxHash String?                           // 链上交易哈希
+  vcId        String?  @unique                    // 关联的可验证凭证ID
+  status      String   @default("draft")        // draft, signed, onchain, verified
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  credential VerifiableCredential? @relation(fields: [vcId], references: [id])
+}
+
+model VerifiableCredential {
+  id              String   @id @default(cuid())
+  issuerDID       String                          // W3C DID
+  subjectDID      String                          // 被验证方 DID
+  credentialType  String                          // 凭证类型
+  claimData       String                          // 凭证声明数据 (JSON)
+  proof           String?                         // 签名证明
+  hash            String?                         // 凭证哈希
+  validFrom       DateTime @default(now())
+  validUntil      DateTime?
+  revoked         Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  founderId   String?
+  founder     Founder?   @relation(fields: [founderId], references: [id])
+  evidence    EvidenceItem?
+}
+
+// ===== 流体协作调度器 =====
+model CollaborationTask {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  complexity  String   @default("medium")  // low, medium, high, critical
+  category    String   @default("code")    // code, design, research, creative
+  reward      Float    @default(0.0)       // 微支付金额
+  rewardToken String   @default("USDT")    // 结算代币
+  status      String   @default("open")    // open, assigned, in_progress, review, completed, cancelled
+  priority    Int      @default(5)         // 1-10
+  deadline    DateTime?
+  assigneeType String  @default("auto")    // ai, human, auto
+  ciStatus    String   @default("pending") // pending, passed, failed, scanning
+  safetyScan  String   @default("pending") // pending, passed, failed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creatorId  String
+  assigneeId String?
+  creator    Founder  @relation("TaskCreator", fields: [creatorId], references: [id])
+  assignee   Founder? @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  payments   PaymentRecord[]
+}
+
+model PaymentRecord {
+  id        String   @id @default(cuid())
+  taskId    String
+  amount    Float
+  token     String   @default("USDT")
+  txHash    String?               // 链上交易哈希
+  status    String   @default("pending")  // pending, confirmed, failed
+  createdAt DateTime @default(now())
+
+  task CollaborationTask @relation(fields: [taskId], references: [id])
+}
+
+// ===== 虚实共生沙盒 =====
+model SandboxProject {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  projectType String   @default("3d_prototype")  // 3d_prototype, spatial_ui, ar_scene
+  sceneData   String?                              // Three.js scene JSON
+  xdpEnabled  Boolean  @default(false)            // XDP 协议接口开关
+  status      String   @default("draft")          // draft, building, interactive, published
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  interactions SandboxInteraction[]
+}
+
+model SandboxInteraction {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  triggerType String   @default("click")  // click, gaze, proximity, voice
+  actionType  String   @default("navigate") // navigate, animate, data_fetch, state_change
+  config      String?                       // 交互配置 (JSON)
+  createdAt   DateTime @default(now())
+
+  project SandboxProject @relation(fields: [projectId], references: [id])
+}
+
+// ===== 90天路线图 =====
+model RoadmapPhase {
+  id          String   @id @default(cuid())
+  phase       Int                              // 1, 2, 3
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  status      String   @default("pending")    // pending, active, completed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  milestones Milestone[]
+}
+
+model Milestone {
+  id          String   @id @default(cuid())
+  phaseId     String
+  title       String
+  description String?
+  targetDate  DateTime
+  status      String   @default("pending")    // pending, in_progress, completed, failed
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  phase RoadmapPhase @relation(fields: [phaseId], references: [id])
+}
+
+// ===== SOUL.md 人格配置 =====
+model SoulConfig {
+  id          String   @id @default(cuid())
+  name        String   @unique                    // 配置名称 e.g. "piaoshu-soul-v1"
+  content     String                              // SOUL.md 原始内容
+  isActive    Boolean  @default(true)             // 当前激活的配置
+  version     Int      @default(1)                // 版本号
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ===== 聊天记录 =====
+model ChatMessage {
+  id          String   @id @default(cuid())
+  role        String                              // user, assistant, system
+  content     String                              // 消息内容
+  sessionId   String?                             // 会话ID，用于关联对话
+  module      String?                             // 来源模块: cognitive, evidence, collaboration, sandbox, roadmap
+  modelUsed   String?                             // 使用的模型
+  tokenCount  Int      @default(0)
+  metadata    String?                             // 额外元数据 (JSON string)
+  createdAt   DateTime @default(now())
+}
+
+// ===== 记忆条目 =====
+model MemoryEntry {
+  id             String   @id @default(cuid())
+  sourceType     String                              // simulation, chat, decision, manual, evidence, external
+  sourceId       String?                             // 来源实体ID
+  content        String                              // 记忆内容摘要
+  embedding      String?                             // 向量嵌入 (JSON array string, 未来接Qdrant后迁移)
+  tags           String?                             // 逗号分隔的标签
+  relevanceScore Float    @default(0.0)              // 相关性/重要性评分
+  accessCount    Int      @default(0)                // 被检索次数
+  lastAccessed   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ===== 审计日志 =====
+model AuditLog {
+  id          String   @id @default(cuid())
+  action      String                              // 操作类型: create, update, delete, sign, verify, simulate
+  module      String                              // 模块名: cognitive, evidence, collaboration, sandbox, roadmap
+  entityType  String?                             // 实体类型
+  entityId    String?                             // 实体ID
+  details     String?                             // 详情 (JSON string)
+  performedBy String   @default("system")         // 执行者
+  createdAt   DateTime @default(now())
+}
+
+// ===== 通知 =====
+model Notification {
+  id          String   @id @default(cuid())
+  type        String                              // info, warning, success, error
+  title       String
+  message     String
+  module      String?                             // 来源模块
+  isRead      Boolean  @default(false)
+  actionUrl   String?                             // 点击跳转链接
+  createdAt   DateTime @default(now())
+}
+
+// ===== 角色化AI代理 =====
+model AgentRole {
+  id           String   @id @default(cuid())
+  name         String                    // CEO, CTO, Growth, Engineer, Designer, etc.
+  persona      String                    // 角色人格描述
+  avatar       String?                   // 角色头像URL
+  capabilities String?                   // 能力列表 (JSON array string)
+  status       String   @default("idle") // idle, working, sleeping, error
+  lastCycleAt  DateTime?
+  cycleCount   Int      @default(0)      // 完成的周期数
+  shardId      String?                   // 关联的认知分片
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  cycles DailyCycle[]
+}
+
+model DailyCycle {
+  id          String    @id @default(cuid())
+  agentId     String
+  phase       String    @default("planning") // planning, executing, reporting, completed
+  plan        String?                     // 本周期计划 (JSON)
+  execution   String?                     // 执行结果 (JSON)
+  report      String?                     // 周期报告
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  agent AgentRole @relation(fields: [agentId], references: [id])
+}
+
+// ===== 用户账户 =====
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String // bcrypt hash
+  avatar       String? // avatar image URL
+  bio          String?
+  plan         String   @default("free") // free, pro, enterprise
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  clone AvatarClone?
+  emailConfigs  EmailConfig[]
+  subscriptions  UserSubscription[]
+  afcTransactions AFCTransaction[]
+}
+
+// ===== AI分身(数字克隆体) =====
+model AvatarClone {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  name         String // 分身名称 e.g. "飘叔"
+  persona      String // 核心人格描述 (SOUL.md内容)
+  avatarStyle  String   @default("realistic") // realistic, cartoon, abstract
+  avatarUrl    String? // 分身头像
+  status       String   @default("initializing") // initializing, active, sleeping, error
+  level        Int      @default(1) // 分身等级
+  experience   Int      @default(0) // 经验值
+  totalCycles  Int      @default(0) // 累计周期数
+  lastActiveAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id])
+  agents        CloneAgent[]
+  skills        CloneSkill[]
+  activities    CloneActivity[]
+  dailySchedules DailySchedule[]
+  memoryWings   MemoryWing[]
+  kgEntities    KGEntity[]
+}
+
+// ===== 分身代理 (Polsia角色) =====
+model CloneAgent {
+  id          String    @id @default(cuid())
+  cloneId     String
+  name        String // CEO, CTO, Growth, Engineer, Designer, etc.
+  role        String // 角色类型
+  persona     String // 角色人格描述
+  avatarUrl   String? // 角色头像
+  status      String    @default("idle") // idle, working, sleeping, error
+  level       Int       @default(1)
+  experience  Int       @default(0)
+  cycleCount  Int       @default(0)
+  lastCycleAt DateTime?
+  config      String? // JSON: agent configuration (tools, permissions, etc.)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  clone   AvatarClone  @relation(fields: [cloneId], references: [id])
+  cycles  AgentCycle[]
+  outputs AgentOutput[]
+}
+
+// ===== 代理周期 (Polsia日周期) =====
+model AgentCycle {
+  id          String    @id @default(cuid())
+  agentId     String
+  phase       String    @default("planning") // planning, executing, reporting, completed
+  plan        String? // JSON: 本周期计划
+  execution   String? // JSON: 执行结果
+  report      String? // 周期报告
+  metrics     String? // JSON: 执行指标
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  agent   CloneAgent   @relation(fields: [agentId], references: [id])
+  outputs AgentOutput[]
+}
+
+// ===== 代理输出 (代码/邮件/部署/分析) =====
+model AgentOutput {
+  id         String   @id @default(cuid())
+  agentId    String
+  cycleId    String
+  outputType String // code, email, deployment, analysis, design, task
+  title      String
+  content    String // 输出内容
+  metadata   String? // JSON: 额外元数据
+  status     String   @default("draft") // draft, submitted, approved, rejected
+  createdAt  DateTime @default(now())
+
+  agent CloneAgent @relation(fields: [agentId], references: [id])
+  cycle AgentCycle @relation(fields: [cycleId], references: [id])
+}
+
+// ===== 分身技能 =====
+model CloneSkill {
+  id          String   @id @default(cuid())
+  cloneId     String
+  name        String // 技能名称: code_writing, email_automation, deployment, metrics_analysis, etc.
+  category    String // 分类: engineering, marketing, operations, design
+  level       Int      @default(1) // 技能等级 1-10
+  experience  Int      @default(0) // 技能经验
+  description String?
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clone AvatarClone @relation(fields: [cloneId], references: [id])
+}
+
+// ===== 分身活动 =====
+model CloneActivity {
+  id           String   @id @default(cuid())
+  cloneId      String
+  agentId      String? // 关联的代理
+  activityType String // cycle_completed, output_created, skill_upgraded, agent_added, etc.
+  title        String
+  description  String?
+  metadata     String? // JSON
+  createdAt    DateTime @default(now())
+
+  clone AvatarClone @relation(fields: [cloneId], references: [id])
+}
+
+// ===== 邮件跟踪 + 自动回复 =====
+model EmailConfig {
+  id               String    @id @default(cuid())
+  userId           String
+  emailaddress     String    // The email address being tracked
+  imapHost         String?
+  imapPort         Int       @default(993)
+  smtpHost         String?
+  smtpPort         Int       @default(587)
+  isEnabled        Boolean   @default(false)
+  autoReplyEnabled Boolean   @default(false)
+  autoReplyTemplate String?  // Default auto-reply template
+  trackingEnabled  Boolean   @default(true)
+  lastSyncAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model EmailThread {
+  id           String    @id @default(cuid())
+  userId       String
+  fromAddress  String
+  toAddress    String
+  subject      String
+  snippet      String?   // First 200 chars
+  status       String    @default("unread") // unread, read, replied, ignored, escalated
+  priority     String    @default("normal") // low, normal, high, urgent
+  agentId      String?   // Which agent handled this
+  autoReplied  Boolean   @default(false)
+  labels       String?   // JSON array of labels
+  receivedAt   DateTime
+  repliedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  emails EmailMessage[]
+}
+
+model EmailMessage {
+  id           String    @id @default(cuid())
+  threadId     String
+  fromAddress  String
+  toAddress    String
+  subject      String
+  bodyText     String?
+  bodyHtml     String?
+  inReplyTo    String?
+  isAutoReply  Boolean   @default(false)
+  aiGenerated  Boolean   @default(false)
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  thread EmailThread @relation(fields: [threadId], references: [id])
+}
+
+model AutoReplyRule {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  condition   String   // JSON: { field, operator, value } e.g. subject contains "pricing"
+  template    String   // Auto-reply template content
+  agentId     String?  // Which agent should handle
+  priority    String   @default("normal")
+  isEnabled   Boolean  @default(true)
+  matchCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ===== 跨分身共享知识 =====
+model SharedKnowledge {
+  id           String   @id @default(cuid())
+  domain       String   // e.g., "marketing", "code", "growth", "strategy", "engineering"
+  insight      String   // The anonymized insight/learning
+  sourceType   String   // e.g., "agent_cycle", "simulation", "task"
+  confidence   Float    @default(0.5)
+  appliedCount Int      @default(0)  // How many clones have applied this
+  createdAt    DateTime @default(now())
+}
+
+// ===== 链上交易记录 =====
+model OnChainTransaction {
+  id          String   @id @default(cuid())
+  txHash      String   @unique
+  txType      String   // anchor_evidence, settle_payment, verify
+  status      String   @default("pending") // pending, confirmed, failed
+  blockNumber Int?
+  gasUsed     Int?
+  fromAddress String?
+  toAddress   String?  // contract address
+  entityId    String?  // evidence ID or payment ID
+  metadata    String?  // JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ===== 日程安排 =====
+model DailySchedule {
+  id        String   @id @default(cuid())
+  cloneId   String
+  day       DateTime // 哪一天
+  timeSlots String // JSON: [{time, agentId, task, status}]
+  status    String   @default("planned") // planned, in_progress, completed
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clone AvatarClone @relation(fields: [cloneId], references: [id])
+}
+
+// ===== AFC Token 订阅系统 =====
+model SubscriptionPlan {
+  id          String   @id @default(cuid())
+  name        String   @unique // "free", "starter", "pro", "enterprise"
+  displayName String   // "免费版", "入门版", "专业版", "企业版"
+  priceAFC    Int      @default(0)  // Price in AFC tokens per month
+  priceUSD    Float    @default(0)  // USD equivalent
+  maxClones   Int      @default(1)
+  maxCyclesPerDay Int  @default(5)
+  features    String   // JSON array of feature strings
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subscriptions UserSubscription[]
+}
+
+model UserSubscription {
+  id          String   @id @default(cuid())
+  userId      String
+  planId      String
+  status      String   @default("active") // active, past_due, cancelled, expired
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  afcBalance  Int      @default(0)  // AFC token balance
+  afcUsed     Int      @default(0)  // AFC tokens used this period
+  paymentMethod String @default("afc_base") // afc_base, usdt_base, usdc_base, credit_card
+  walletAddress String?
+  autoRenew   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id])
+  plan        SubscriptionPlan @relation(fields: [planId], references: [id])
+}
+
+model AFCTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String   // subscription_payment, skill_purchase, cycle_payment, top_up, withdrawal, reward
+  amount      Int      // AFC amount (positive for credit, negative for debit)
+  txHash      String?  // On-chain tx hash
+  status      String   @default("pending") // pending, confirmed, failed
+  description String?
+  metadata    String?  // JSON for additional data
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+// ===== 媒体矩阵 =====
+model MediaVertical {
+  id          String   @id @default(cuid())
+  name        String   // 科技, 金融, 生活方式
+  slug        String   @unique // tech, finance, lifestyle
+  icon        String?  // emoji icon
+  color       String?  // theme color e.g. "emerald"
+  description String?
+  status      String   @default("active") // active, paused, archived
+  priority    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  channels   MediaChannel[]
+  contents   MediaContent[]
+  partners   BDPartner[]
+  keywords   GEOKeyword[]
+}
+
+model MediaChannel {
+  id          String   @id @default(cuid())
+  verticalId  String
+  name        String   // channel name e.g. "微信公众号", "X/Twitter", "小红书"
+  platform    String   // wechat, twitter, xiaohongshu, douyin, youtube, discord, reddit
+  url         String?  // channel URL
+  followers   Int      @default(0)
+  avgReach    Int      @default(0)   // average reach per post
+  postFrequency String @default("daily") // daily, weekly, biweekly
+  status      String   @default("active") // active, paused, growth, declining
+  avatarUrl   String?
+  lastPostAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  vertical MediaVertical @relation(fields: [verticalId], references: [id])
+}
+
+model MediaContent {
+  id            String   @id @default(cuid())
+  verticalId    String
+  channelId     String?
+  title         String
+  contentType   String   @default("article") // article, video, infographic, micro_content, citation_unit
+  status        String   @default("draft") // draft, published, indexed, verified
+  contentData   String?  // JSON: structured content
+  citationUrl   String?  // verifiable citation URL
+  contentHash   String?  // on-chain hash for verification
+  onChainTxId   String?  // on-chain transaction ID
+  schemaMarkup  String?  // JSON-LD structured data
+  reachCount    Int      @default(0)
+  citationCount Int      @default(0)  // how many times cited by AI
+  aiCitationCount Int    @default(0)  // cited by AI agents specifically
+  publishedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  vertical MediaVertical @relation(fields: [verticalId], references: [id])
+}
+
+// ===== 合作伙伴BD管线 =====
+model BDPartner {
+  id           String   @id @default(cuid())
+  verticalId   String?
+  name         String   // partner organization name
+  partnerType  String   @default("data_source") // data_source, distribution, tech_infra
+  tier         String   @default("c") // a (authority), b (platform), c (tech)
+  industry     String?  // e.g. "AI安全研究", "金融数据", "美妆检测"
+  website      String?
+  contactName  String?
+  contactEmail String?
+  contactWechat String?
+  status       String   @default("prospect") // prospect, outreach, negotiating, active, churned
+  stage        String   @default("identified") // identified, contacted, meeting, proposal, closed_won, closed_lost
+  valueScore   Int      @default(0) // 1-100 partnership value score
+  notes        String?  // BD notes
+  bdScriptUsed String?  // which BD script template was used
+  lastContactAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  vertical    MediaVertical? @relation(fields: [verticalId], references: [id])
+  interactions BDInteraction[]
+}
+
+model BDInteraction {
+  id          String   @id @default(cuid())
+  partnerId   String
+  type        String   // email, wechat, meeting, call, proposal_sent, contract_signed
+  subject     String
+  content     String?  // interaction notes/content
+  outcome     String?  // outcome of interaction
+  nextAction  String?  // next step
+  followUpDate DateTime?
+  createdAt   DateTime @default(now())
+
+  partner BDPartner @relation(fields: [partnerId], references: [id])
+}
+
+// ===== GEO优化中心 =====
+model GEOKeyword {
+  id          String   @id @default(cuid())
+  verticalId  String?
+  keyword     String
+  keywordEn   String?  // English version
+  category    String   // core, long_tail, competitor, emerging
+  intent      String   @default("informational") // informational, transactional, navigational
+  searchVolume Int     @default(0)
+  difficulty  Int      @default(0) // 1-100
+  currentRank Int?     // current ranking position
+  targetRank  Int?     // target ranking
+  status      String   @default("tracked") // tracked, optimizing, ranked, lost
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  vertical    MediaVertical? @relation(fields: [verticalId], references: [id])
+  rankings    GEORanking[]
+}
+
+model GEORanking {
+  id          String   @id @default(cuid())
+  keywordId   String
+  rank        Int      // position in search results
+  aiCitation  Boolean  @default(false) // whether AI agent cited our content
+  citationUrl String?  // URL that was cited
+  source      String   @default("google") // google, perplexity, chatgpt, bing
+  capturedAt  DateTime @default(now())
+
+  keyword GEOKeyword @relation(fields: [keywordId], references: [id])
+}
+
+// ===== Agent API管理 =====
+model AgentAPIEndpoint {
+  id          String   @id @default(cuid())
+  name        String   // endpoint name
+  path        String   // e.g. "/api/agent/citations"
+  method      String   @default("GET") // GET, POST
+  description String?
+  requestSchema  String? // JSON schema for request
+  responseSchema String? // JSON schema for response
+  authRequired   Boolean @default(true)
+  rateLimit      Int     @default(100) // requests per minute
+  callCount      Int     @default(0)
+  lastCalledAt   DateTime?
+  status      String   @default("active") // active, deprecated, maintenance
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ===== Memory Palace 分层记忆系统 (MemPalace-inspired) =====
+
+model MemoryWing {
+  id          String   @id @default(cuid())
+  cloneId     String
+  name        String   // domain: "product", "engineering", "relationships", "identity"
+  wingType    String   @default("topic") // topic, person, project, agent
+  description String?
+  priority    Int      @default(5)  // 1-10, determines L1 inclusion
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clone   AvatarClone @relation(fields: [cloneId], references: [id], onDelete: Cascade)
+  rooms   MemoryRoom[]
+}
+
+model MemoryRoom {
+  id          String   @id @default(cuid())
+  wingId      String
+  name        String   // sub-topic: "auth", "billing", "deploy", "general"
+  hallType    String   @default("facts") // facts, events, discoveries, preferences, advice
+  drawerCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  wing     MemoryWing   @relation(fields: [wingId], references: [id], onDelete: Cascade)
+  drawers  MemoryDrawer[]
+  tunnelsA MemoryTunnel[] @relation("TunnelA")
+  tunnelsB MemoryTunnel[] @relation("TunnelB")
+}
+
+model MemoryDrawer {
+  id           String    @id @default(cuid())
+  roomId       String
+  content      String    // Original text content
+  aaaakSummary String?   // AAAK-compressed summary
+  chunkIndex   Int       @default(0)
+  sourceType   String    // simulation, chat, decision, manual, evidence, external, cycle
+  sourceId     String?
+  importance   Float     @default(3.0)  // 1-5, determines L1 loading
+  emotionalWeight Float  @default(0.0)
+  contentHash  String?   // MD5 for dedup
+  accessCount  Int       @default(0)
+  lastAccessed DateTime?
+  validFrom    DateTime  @default(now())
+  validTo      DateTime? // NULL = still valid
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  room    MemoryRoom   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  tags    DrawerTag[]
+}
+
+model DrawerTag {
+  id       String @id @default(cuid())
+  drawerId String
+  tag      String
+  createdAt DateTime @default(now())
+
+  drawer MemoryDrawer @relation(fields: [drawerId], references: [id], onDelete: Cascade)
+}
+
+model MemoryTunnel {
+  id          String   @id @default(cuid())
+  roomAId     String
+  roomBId     String
+  sharedTheme String   // e.g., "authentication", "deployment"
+  strength    Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  roomA MemoryRoom @relation("TunnelA", fields: [roomAId], references: [id], onDelete: Cascade)
+  roomB MemoryRoom @relation("TunnelB", fields: [roomBId], references: [id], onDelete: Cascade)
+}
+
+// ===== Temporal Knowledge Graph =====
+
+model KGEntity {
+  id         String   @id @default(cuid())
+  cloneId    String
+  name       String
+  entityType String   // person, project, technology, concept, organization
+  properties String?  // JSON blob
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  clone           AvatarClone @relation(fields: [cloneId], references: [id], onDelete: Cascade)
+  subjectTriples  KGTriple[]  @relation("Subject")
+  objectTriples   KGTriple[]  @relation("Object")
+}
+
+model KGTriple {
+  id          String    @id @default(cuid())
+  cloneId     String
+  subjectId   String
+  predicate   String    // works_on, reports_to, prefers, decided, owns, etc.
+  objectId    String
+  validFrom   DateTime  @default(now())
+  validTo     DateTime? // NULL = currently valid
+  confidence  Float     @default(1.0)
+  sourceDrawerId String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  subject KGEntity @relation("Subject", fields: [subjectId], references: [id], onDelete: Cascade)
+  object  KGEntity @relation("Object", fields: [objectId], references: [id], onDelete: Cascade)
+}
+
+// ===== Stripe 支付会话 =====
+model PaymentSession {
+  id            String   @id @default(cuid())
+  sessionId     String   @unique  // Stripe session ID
+  userId        String?
+  planId        String?
+  amount        Float
+  currency      String   @default("usd")
+  status        String   @default("pending") // pending, paid, failed, expired
+  paymentMethod String   @default("stripe")  // stripe, stripe_link, crypto
+  metadata      String?  // JSON blob for additional info
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ===== 联邦信任层 (Federation Trust Network) =====
+model FederationDID {
+  id          String   @id @default(cuid())
+  did         String   @unique
+  avatarName  String
+  avatarType  String   @default("clone")
+  trustLevel  String   @default("bronze")  // bronze, silver, gold, platinum
+  publicKey   String?
+  status      String   @default("active")  // active, suspended, revoked
+  didDocument String?  // JSON: full DID document
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  credentials         FederationVC[]       @relation("DIDCredentials")
+  sentConnections     TrustConnection[]    @relation("SenderDID")
+  receivedConnections TrustConnection[]    @relation("ReceiverDID")
+}
+
+model FederationVC {
+  id             String    @id @default(cuid())
+  vcType         String    // SkillProof, AchievementProof, TrustAttestation, CollaborationRecord
+  issuerDid      String
+  subjectDid     String
+  credentialHash String    @unique
+  claims         String    // JSON: credential claims
+  status         String    @default("active") // active, pending, revoked
+  expiresAt      DateTime?
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  issuer FederationDID @relation("DIDCredentials", fields: [issuerDid], references: [did])
+}
+
+model TrustConnection {
+  id              String   @id @default(cuid())
+  senderDid       String
+  receiverDid     String
+  strength        Float    @default(0.5)  // 0.0 - 1.0
+  connectionType  String   @default("collaboration") // collaboration, mentorship, delegation, verification
+  createdAt       DateTime @default(now())
+
+  sender   FederationDID @relation("SenderDID", fields: [senderDid], references: [did])
+  receiver FederationDID @relation("ReceiverDID", fields: [receiverDid], references: [did])
+}
+
+model CrossAvatarMessage {
+  id          String   @id @default(cuid())
+  senderDid   String
+  receiverDid String
+  messageType String   // task_assignment, knowledge_share, collaboration_invite, trust_request
+  content     String   // JSON: message payload
+  status      String   @default("pending") // pending, delivered, acknowledged, failed
+  createdAt   DateTime @default(now())
+}
